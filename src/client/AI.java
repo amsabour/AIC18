@@ -5,6 +5,7 @@ import client.model.Map;
 import common.util.Log;
 import javafx.util.Pair;
 
+import java.awt.image.AreaAveragingScaleFilter;
 import java.lang.reflect.Array;
 import java.util.*;
 
@@ -30,7 +31,9 @@ public class AI {
     private static final int RISK_WHEN_AT_END = 50;
     private boolean initialize = true;
     private static final int RISK_DECREASE_BY_BEING_IN_RANGE = 3; // TODO: 2/18/2018 this needs tweaking
-    private static ArrayList<ArrayList<RoadCell>> myPaths;
+    private static ArrayList<ArrayList<Integer>> myPaths;
+
+
     private static int firstPlayer = 1;
 
 
@@ -39,7 +42,7 @@ public class AI {
         if (firstPlayer == 1 && initialize) {
             init(game);
             initialize = false;
-        } else {
+        } else if (firstPlayer == 1) {
             updateMyPaths(game);
         }
 
@@ -66,14 +69,6 @@ public class AI {
                     game.createLightUnit(rnd);
                     money -= req;
                 }
-            } else {
-                System.out.println("Why Doesnt this bitch send any troops!!!!!!!!!!!!");
-                int money = game.getMyInformation().getMoney();
-                while (money >= 500) {
-                    int pathToAttack = random.nextInt(game.getAttackMapPaths().size());
-                    game.createLightUnit(pathToAttack);
-                    money -= LightUnit.INITIAL_PRICE;
-                }
             }
         } else if (move == 0) { // Save money //TODO
             return;
@@ -82,40 +77,40 @@ public class AI {
 
     }
 
+
     private void updateMyPaths(World game) {
         for (int i = 0; i < game.getDefenceMapPaths().size(); i++) {
-            ArrayList<RoadCell> tempPath = new ArrayList<RoadCell>(game.getDefenceMapPaths().get(i).getRoad());
-            tempPath.add(0, game.getDefenceMapPaths().get(i).getRoad().get(0));
-            tempPath.remove(tempPath.size() - 1);
+            int size = 0;
+            size = game.getDefenceMapPaths().get(i).getRoad().get(3).getUnits().size();
+            myPaths.get(i).remove(myPaths.get(i).size() - 1);
+            myPaths.get(i).add(0, size);
         }
     }
 
     private void init(World game) {
-        myPaths = new ArrayList<ArrayList<RoadCell>>(game.getDefenceMapPaths().size());
-        for (int i = 0 ; i < game.getDefenceMapPaths().size(); i++){
-            ArrayList<RoadCell> myPath = new ArrayList<RoadCell>(game.getDefenceMapPaths().get(i).getRoad());
-            myPaths.add(myPath);
+        myPaths = new ArrayList<ArrayList<Integer>>(game.getDefenceMapPaths().size());
+        ArrayList<Integer> tempPath = new ArrayList<>();
+
+        for (int i = 0; i < game.getDefenceMapPaths().size(); i++) {
+            for (RoadCell roadCell : game.getDefenceMapPaths().get(i).getRoad()) {
+                tempPath.add(0);
+            }
+            myPaths.add(tempPath);
         }
     }
 
     void complexTurn(World game) {
         Log.d(TAG, "HeavyTurn Called" + " Turn:" + game.getCurrentTurn());
-        int move = whatToDo(game);
-        if (move == -1) { // Defence
-            complexDefenceTurn(game);
-        } else if (move == 1) {// Attack // TODO
-            return;
-        } else if (move == 0) {// Save money // TODO
-            return;
+        if (firstPlayer == 1) {
+            int sum = 0;
+            for (int i = 0; i < myPaths.get(0).size(); i++) {
+                sum += myPaths.get(0).get(i);
+            }
         }
     }
 
     private int whatToDo(World game) { // Decide whether to attack(1) , defence(-1) or save money (0)
         if (firstPlayer == 1) {
-//            if (game.getCurrentTurn() % 3 == 0) {
-//                System.out.println("Attack Now!"); todo Next stage here!!!
-//                return 1;
-//            }
             return -1; // Defence for now //TODO
         } else {
             return 1;
@@ -134,29 +129,27 @@ public class AI {
                 }
             }
             int money = game.getMyInformation().getMoney();
-            while (money >= ArcherTower.INITIAL_PRICE) {
+            int maxTowersAllowedToMake = 2;
+            while (money >= ArcherTower.INITIAL_PRICE && maxTowersAllowedToMake > 0) {
                 if (worthy.size() <= 0) {
                     break;
                 }
                 int rnd = random.nextInt(worthy.size());
+
                 if (money >= CannonTower.INITIAL_PRICE) {
                     money -= CannonTower.INITIAL_PRICE;
                     game.createCannonTower(1, worthy.get(rnd).getLocation().getX(), worthy.get(rnd).getLocation().getY());
-
                 } else {
                     money -= ArcherTower.INITIAL_PRICE;
                     game.createArcherTower(1, worthy.get(rnd).getLocation().getX(), worthy.get(rnd).getLocation().getY());
                 }
-                if (doesCellSeePath(worthy.get(rnd), game.getDefenceMapPaths().get(0), game)) {
-                    game.createLightUnit(0);
-                    System.out.println("FUUUUUUUUUUUUUUUUUUCK");
-                }
+                maxTowersAllowedToMake--;
                 worthy.remove(rnd);
             }
             while (money >= ArcherTower.INITIAL_LEVEL_UP_PRICE && game.getMyTowers().size() > 0) {
                 money -= ArcherTower.INITIAL_LEVEL_UP_PRICE;
                 int rnd = random.nextInt(game.getMyTowers().size());
-                game.upgradeTower(game.getMyTowers().get(rnd));
+                //game.upgradeTower(game.getMyTowers().get(rnd));
             }
 
         } else if (move == 2) {
@@ -261,8 +254,9 @@ public class AI {
             int enemiesIHaveSeen = 0;
             int lastCellThatSawMe = -1;
             if (doesCellSeePath(cell, game.getDefenceMapPaths().get(i), game)) {
-                for (RoadCell roadCell : myPaths.get(i)) {
-                    enemiesIHaveSeen += roadCell.getUnits().size(); // TODO: 2/18/2018 Regular and high level units must differ
+                for (int j = 3; j < game.getDefenceMapPaths().get(i).getRoad().size(); j++) {
+                    RoadCell roadCell = game.getDefenceMapPaths().get(i).getRoad().get(j);
+                    enemiesIHaveSeen += myPaths.get(i).get(j); // TODO: 2/18/2018 Regular and high level units must differ
                     if (Math.abs(x - roadCell.getLocation().getX()) + Math.abs(y - roadCell.getLocation().getY()) <= 2) {
                         temp = enemiesIHaveSeen;
                         lastCellThatSawMe = i;
