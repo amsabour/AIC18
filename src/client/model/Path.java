@@ -20,7 +20,6 @@ public class Path {
     @Override
     public String toString() {
         String result = "Path: ";
-
         for (int i = 0; i < road.size(); i++) {
             result += "(" + road.get(i).getLocation().getX() + "," + road.get(i).getLocation().getY() + ")" + " ";
         }
