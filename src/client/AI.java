@@ -211,7 +211,8 @@ public class AI {
             built = 0;
             while (money >= LightUnit.INITIAL_PRICE && built <= MAX_ATTACK_IN_DEFENCE_TURN) {
                 money -= LightUnit.INITIAL_PRICE;
-                game.createLightUnit(0);
+                int rnd = random.nextInt(game.getAttackMapPaths().size());
+                game.createLightUnit(rnd);
                 built++;
             }
         } else if (move == 2) {
