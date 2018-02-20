@@ -34,6 +34,7 @@ public class AI {
     private static final int MAX_UPGRADES_PER_TURN = 1;
     private static final int MAX_ATTACK_IN_DEFENCE_TURN = 2;
     private static int firstPlayer = 1;
+    private static final int MAX_UNITS_SENT = 30;
 
 
     void simpleTurn(World game) {
@@ -68,23 +69,42 @@ public class AI {
         if (move == -1) { // Defence
             simpleDefenceTurn(game);
         } else if (move == 1) { // Attack //TODO
-            if (firstPlayer == 0) {
-                int req1 = LightUnit.INITIAL_PRICE;
-                int money = game.getMyInformation().getMoney();
-                while (true) {
-                    if (money < req1) {
-                        break;
-                    }
-                    int rnd = random.nextInt(game.getAttackMapPaths().size());
-                    game.createLightUnit(rnd);
-                    money -= req1;
-                }
-            }
+            simpleAttackTurn(game);
         } else if (move == 0) { // Save money //TODO
             return;
         }
 
 
+    }
+
+    private void simpleAttackTurn(World game) {
+        int worstCase = -1;
+        int counter = -1;
+        for (int i = 0; i < game.getAttackMapPaths().size(); i++) {
+            Path path = game.getAttackMapPaths().get(i);
+            int ct = 0;
+            for (Tower tower : game.getVisibleEnemyTowers()) {
+                Cell cell = game.getAttackMap().getCell(tower.getLocation().getX(), tower.getLocation().getY());
+                if (doesTowerAttackPath(tower, path, game.getAttackMap())) {
+                    ct++;
+                }
+            }
+            if(ct > counter){
+                worstCase = i;
+                counter = ct;
+            }
+        }
+        if(worstCase != -1) {
+            int money = game.getMyInformation().getMoney();
+            while (money > HeavyUnit.INITIAL_PRICE) {
+                money -= HeavyUnit.INITIAL_PRICE;
+                game.createHeavyUnit(worstCase);
+            }
+            while (money > LightUnit.INITIAL_PRICE){
+                money -= LightUnit.INITIAL_PRICE;
+                game.createLightUnit(worstCase);
+            }
+        }
     }
 
     private void init(World game) {
@@ -94,21 +114,21 @@ public class AI {
 
     void complexTurn(World game) {
         Log.d(TAG, "HeavyTurn Called" + " Turn:" + game.getCurrentTurn());
-        if(game.getCurrentTurn() == 10){
+        if (game.getCurrentTurn() == 10) {
             MAX_TOWERS_PER_TURN = game.getDefenceMapPaths().size();
             ArrayList<Path> paths = new ArrayList<>();
-            for (Path path: game.getDefenceMapPaths()){
+            for (Path path : game.getDefenceMapPaths()) {
                 int sum = 0;
-                for(int i = 1; i < path.getRoad().size(); i++){
+                for (int i = 1; i < path.getRoad().size(); i++) {
                     sum += path.getRoad().get(i).getUnits().size();
                 }
-                if(sum > 0){
+                if (sum > 0) {
                     paths.add(path);
                 }
             }
             ArrayList<RoadCell> firstOnes = new ArrayList<>();
             for (Path path : game.getDefenceMapPaths()) {
-                if(paths.contains(path)) {
+                if (paths.contains(path)) {
                     RoadCell roadCell = path.getRoad().get(0);
                     if (!firstOnes.contains(roadCell)) {
                         firstOnes.add(roadCell);
@@ -122,8 +142,8 @@ public class AI {
                     for (int j = -2; j < 3; j++) {
                         if (isValidAndWithinRange(x, y, i, j, game.getDefenceMap())) {
                             Cell cell = game.getDefenceMap().getCell(x + i, y + j);
-                            if(game.isTowerConstructable(cell)){
-                                if(!attackers.contains(cell)){
+                            if (game.isTowerConstructable(cell)) {
+                                if (!attackers.contains(cell)) {
                                     attackers.add(cell);
                                 }
                             }
@@ -132,18 +152,20 @@ public class AI {
                 }
             }
 
-            for (Cell cell: attackers){
+            for (Cell cell : attackers) {
                 game.createCannonTower(1, cell.getLocation().getX(), cell.getLocation().getY());
+
             }
         }
     }
 
     private int whatToDo(World game) { // Decide whether to attack(1) , defence(-1) or save money (0)
         if (firstPlayer == 1) {
-            if (game.getCurrentTurn() % 2 == 0) {
-                return -1; // Defence for now //TODO
+            int turn = game.getCurrentTurn() % 10;
+            if (turn == 7 || turn == 8 ||turn == 9) {
+                return 1; // Defence for now //TODO
             } else {
-                return 1;
+                return -1;
             }
         } else {
             return 1;
@@ -153,6 +175,7 @@ public class AI {
     private void simpleDefenceTurn(World game) {
         int move = makeOrUpgrade(game);
         if (move == 1) {
+
             ArrayList<Cell> worthy = cellsSortedByRisk(game);
 
             int money = game.getMyInformation().getMoney();
@@ -188,7 +211,7 @@ public class AI {
             built = 0;
             while (money >= LightUnit.INITIAL_PRICE && built <= MAX_ATTACK_IN_DEFENCE_TURN) {
                 money -= LightUnit.INITIAL_PRICE;
-//                game.createLightUnit(0);
+                game.createLightUnit(0);
                 built++;
             }
         } else if (move == 2) {
@@ -210,19 +233,19 @@ public class AI {
     private ArrayList<Cell> cellsSortedByRisk(World game) {
         ArrayList<Cell> allAvailableCells = getAllAvailableCells(game);
         ArrayList<Cell> worthy = new ArrayList<>();
-        ArrayList<Double> availableWorths = new ArrayList<>();
-        for (Cell allAvailableCell : allAvailableCells) {
-            double worth = isTowerWorthy(allAvailableCell, game);
-            if (worth >= IS_TOWER_WORTHY) {
-                worthy.add(allAvailableCell);
-                availableWorths.add(worth);
+        ArrayList<int[]> availableWorths = new ArrayList<>();
+        for (Cell cell : allAvailableCells) {
+            int[] result = isTowerWorthy(cell, game);
+            if (result[1] != 0) {
+                worthy.add(cell);
+                availableWorths.add(result);
             }
         }
 
         for (int i = 0; i < worthy.size(); i++) {
             for (int j = i + 1; j < worthy.size(); j++) {
-                if (availableWorths.get(i) > availableWorths.get(j)) {
-                    double temp = availableWorths.get(i);
+                if (decideBetweenCells(availableWorths.get(i), availableWorths.get(j))) {
+                    int[] temp = availableWorths.get(i);
                     availableWorths.set(i, availableWorths.get(j));
                     availableWorths.set(j, temp);
                     Cell cell = worthy.get(i);
@@ -233,6 +256,27 @@ public class AI {
         }
         return worthy;
     }
+
+    private boolean decideBetweenCells(int[] firstCell, int[] secondCell) {
+        if (firstCell[1] != secondCell[1]) {
+            return firstCell[1] > secondCell[1];
+        } else {
+            if (firstCell[2] != secondCell[2]) {
+                return firstCell[2] < secondCell[2];
+            } else {
+                if (firstCell[4] != secondCell[4]) {
+                    return firstCell[4] > secondCell[4];
+                } else {
+                    if (firstCell[0] != secondCell[0]) {
+                        return firstCell[0] < secondCell[0];
+                    } else {
+                        return firstCell[3] != secondCell[3] && firstCell[3] > secondCell[3];
+                    }
+                }
+            }
+        }
+    }
+
 
     private ArrayList<Tower> towersSortedByRisk(World game) {
         ArrayList<Tower> worthyTowers = new ArrayList<>();
@@ -263,16 +307,16 @@ public class AI {
         return Math.abs(i) + Math.abs(j) <= 2 && isPointValid(x + i, y + j, map);
     }
 
-    private boolean doesTowerAttackPath(Tower tower, Path path, World game) {
+    private boolean doesTowerAttackPath(Tower tower, Path path, Map map) {
         int x = tower.getLocation().getX();
         int y = tower.getLocation().getY();
         for (int i = -2; i <= 2; i++) {
             for (int j = -2; j <= 2; j++) {
                 if (Math.abs(i) + Math.abs(j) <= 2) {
-                    if (isPointValid(x + i, y + j, game.getDefenceMap())) {
+                    if (isPointValid(x + i, y + j, map)) {
                         for (RoadCell roadCell : path.getRoad()) {
-                            if (game.getDefenceMap().getCell(x + i, y + j).getLocation().getX() == roadCell.getLocation().getX() &&
-                                    game.getDefenceMap().getCell(x + i, y + j).getLocation().getY() == roadCell.getLocation().getY()) {
+                            if (map.getCell(x + i, y + j).getLocation().getX() == roadCell.getLocation().getX() &&
+                                    map.getCell(x + i, y + j).getLocation().getY() == roadCell.getLocation().getY()) {
                                 return true;
                             }
                         }
@@ -359,7 +403,7 @@ public class AI {
     private static final double LENGTH_FROM_START_WEIGHT = -4.0;
     private static final int IS_TOWER_WORTHY = 30; // TODO: 2/18/2018 this need tweaking
 
-    private double isTowerWorthy(Cell cell, World game) {
+    private int[] isTowerWorthy(Cell cell, World game) {
         int x = cell.getLocation().getX();
         int y = cell.getLocation().getY();
         int lengthsFromStarts = 0;
@@ -386,29 +430,39 @@ public class AI {
                 lengthsFromStarts += lastCellThatSawMe;
             }
         }
-        int check = 0;
-        for (int i = -3; i <= 3; i++) {
-            for (int j = -3; j <= 3; j++) {
-                if (isValidAndWithinRange(cell.getLocation().getX(), cell.getLocation().getY(), i, j, game.getDefenceMap())) {
-                    Cell cell1 = game.getDefenceMap().getCell(cell.getLocation().getX() + i, cell.getLocation().getY() + j);
+        int enemiesISee = 0;
+        for (int i = -2; i <= 2; i++) {
+            for (int j = -2; j <= 2; j++) {
+                if (isValidAndWithinRange(x, y, i, j, game.getDefenceMap())) {
+                    Cell cell1 = game.getDefenceMap().getCell(x + i, y + j);
                     if (cell1 instanceof RoadCell) {
-                        check += ((RoadCell) cell1).getUnits().size();
+                        enemiesISee += ((RoadCell) cell1).getUnits().size();
                     }
                 }
             }
         }
-        double riskDecrease = 0;
-        if (check == 0) {
-            return 0;
-        }
-        if (enemiesLeftToSee == 0) {
-            return 0;
+        int good = 1;
+        outer:
+        for (Path path : game.getDefenceMapPaths()) {
+            if (doesCellSeePath(cell, path, game)) {
+                int seen = 0;
+                for (RoadCell roadCell : path.getRoad()) {
+                    int a = roadCell.getLocation().getX(), b = roadCell.getLocation().getY();
+                    if (Math.abs(x - a) + Math.abs(y - b) <= 2) {
+                        if (roadCell.getUnits().size() > 0) {
+                            if (seen == 0) {
+                                seen = 1;
+                            } else {
+                                good = 0;
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        riskDecrease += weightedSum * WEIGHTED_SUM_WEIGHT;
-        riskDecrease += enemiesLeftToSee * ENEMIES_TO_SEE_WEIGHT;
-        riskDecrease += lengthsFromStarts * LENGTH_FROM_START_WEIGHT;
-        return riskDecrease;
+        return new int[]{enemiesISee, enemiesLeftToSee, lengthsFromStarts, weightedSum, good};
     }
 
     private int howManyCellsDoISee(Cell cell, World game) {
